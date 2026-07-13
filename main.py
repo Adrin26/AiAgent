@@ -28,7 +28,7 @@ prompt = ChatPromptTemplate.from_messages(
             """,
         ),
         ("placeholder", "{chat_history}"),
-        ("human", "{query} {name}"),
+        ("human", "{query}"),
         ("placeholder", "{agent_scratchpad}"),
     ]
 ).partial(format_instructions=parser.get_format_instructions())
@@ -40,4 +40,12 @@ agent = create_tool_calling_agent(
 )
 
 agent_executor = AgentExecutor(agent=agent, tools=[], verbose=True)
-raw_response = agent_executor.invoke({"query": "What is the capital of France?", "name": "John Doe"})
+raw_response = agent_executor.invoke({"query": "What is the capital of France?"})
+print(raw_response)
+
+try:
+    structured_response = parser.parse(raw_response.get("output")[0]["text"])
+    print(structured_response)
+except Exception as e:
+    print(f"Error parsing response: {e}")
+
