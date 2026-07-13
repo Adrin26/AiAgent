@@ -1,51 +1,54 @@
+import os
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from langchain.agents import create_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import PydanticOutputParser
-from langchain_classic.agents import create_tool_calling_agent, AgentExecutor
-
+from langchain_core.messages import HumanMessage
+from tools import tool1, tool2, tool3
 
 load_dotenv()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+models = "gemini-3.1-flash-lite"
+llm = ChatGoogleGenerativeAI(model=models, api_key=GEMINI_API_KEY)
 
-class ResearchResponse(BaseModel):
-    topic: str
-    summary: str
-    sources: list[str]
-    tools_used: list[str]
-
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite")
-parser = PydanticOutputParser(pydantic_object=ResearchResponse)
-
-prompt = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            """
-            You are a research assistant that will help generate a research paper.
-            Answer the user query and use neccessary tools.
-            Wrap the output in this format and provide no other text. \n{format_instructions}
-            """,
-        ),
-        ("placeholder", "{chat_history}"),
-        ("human", "{query}"),
-        ("placeholder", "{agent_scratchpad}"),
-    ]
-).partial(format_instructions=parser.get_format_instructions())
-
-agent = create_tool_calling_agent(
-    llm=llm, 
-    prompt = prompt, 
-    tools = []
+tools = [tool1, tool2, tool3]
+agent = create_agent(
+    model=llm,
+    tools=tools,
+    system_prompt="You are a helpful assistant that can use relevant tools to answer questions.",
 )
 
-agent_executor = AgentExecutor(agent=agent, tools=[], verbose=True)
-raw_response = agent_executor.invoke({"query": "What is the capital of France?"})
-print(raw_response)
 
-try:
-    structured_response = parser.parse(raw_response.get("output")[0]["text"])
-    print(structured_response)
-except Exception as e:
-    print(f"Error parsing response: {e}")
+def _message_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+            elif isinstance(block, str):
+                parts.append(block)
+        return "".join(parts).strip() or str(content)
+    return str(content)
 
+
+def main():
+    print("AI Agent ready. Type 'quit' or 'exit' to stop.\n")
+    messages = []
+
+    while True:
+        user_input = input("You: ").strip()
+        if not user_input:
+            continue
+        if user_input.lower() in {"quit", "exit"}:
+            print("Goodbye!")
+            break
+
+        messages.append(HumanMessage(content=user_input))
+        response = agent.invoke({"messages": messages})
+        messages = response["messages"]
+        print(f"Agent: {_message_text(messages[-1].content)}\n")
+
+
+if __name__ == "__main__":
+    main()
